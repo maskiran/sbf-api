@@ -17,6 +17,7 @@ class Service(Document):
 class Rule(Document):
     name = StringField()
     service_id = StringField()
+    service_name = StringField()
     source = StringField(default="any")
     action = StringField(choices=['ALLOW', 'DROP'])
 

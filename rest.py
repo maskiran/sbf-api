@@ -1,4 +1,5 @@
 import os
+import time
 
 from flask import Flask, abort, request
 from flask_restplus import Api, Resource
@@ -28,6 +29,12 @@ class Service(Resource):
     def get(self, name):
         return base_query.get(models.Service, name=name)
 
+
+@api.route('/rules')
+class RuleList(Resource):
+    def get(self):
+        return base_query.get_all(models.Rule, **request.args)
+        
 
 if __name__ == "__main__":
     app.run(debug=True)
