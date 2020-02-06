@@ -20,5 +20,5 @@ class Rule(Document):
     service_name = StringField()
     source = StringField(default="any")
     action = StringField(choices=['ALLOW', 'DROP'])
-
+    log = StringField(choices=['LOG', 'NOLOG'])
         

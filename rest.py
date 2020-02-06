@@ -34,7 +34,12 @@ class Service(Resource):
 class RuleList(Resource):
     def get(self):
         return base_query.get_all(models.Rule, **request.args)
-        
+
+    def post(self):
+        body = request.json
+        return base_query.create_item(models.Rule, body)
+
+
 
 if __name__ == "__main__":
     app.run(debug=True)
