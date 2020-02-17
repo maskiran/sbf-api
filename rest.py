@@ -128,5 +128,38 @@ class TLSProfileList(Resource):
         base_query.create_item(models.TLSProfile, **request.json)
 
 
+@api.route('/tsl-profile/<string:name>')
+class TLSProfile(Resource):
+    def get(self, name):
+        return base_query.get_item(models.TLSProfile, name=name)
+
+    def put(self, name):
+        return base_query.update_item(models.TLSProfile, {'name': name}, **request.json)        
+
+    def delete(self, name):
+        base_query.delete_item(models.TLSProfile, name=name)
+
+
+@api.route('/addresses')
+class AddressList(Resource):
+    def get(self):
+        return base_query.get_all_items(models.Address, **request.args)
+
+    def post(self):
+        base_query.create_item(models.Address, **request.json)
+
+
+@api.route('/address/<string:name>')
+class Address(Resource):
+    def get(self, name):
+        return base_query.get_item(models.Address, name=name)
+
+    def put(self, name):
+        return base_query.update_item(models.Address, {'name': name}, **request.json)        
+
+    def delete(self, name):
+        base_query.delete_item(models.Address, name=name)
+
+
 if __name__ == "__main__":
     app.run(debug=True)
