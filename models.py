@@ -61,6 +61,7 @@ class WafRuleSet(BaseDocument):
 class WafProfile(BaseDocument):
     name = StringField(required=True)
     rule_set_version = StringField()
+    rule_count = IntField(default=0)
     meta = {
         'indexes': [
             {

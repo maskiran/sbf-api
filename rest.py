@@ -116,6 +116,8 @@ class WafProfileRuleSetList(Resource):
         for rule_set_name in rule_set_list:
             data = {'profile_name': profile_name, 'rule_set_name': rule_set_name}
             base_query.create_item(models.WafProfileRuleSet, **data)
+        # update waf-profile with the number of rules
+        base_query.update_item(models.WafProfile, {'name': profile_name}, rule_count=len(rule_set_list))
         return None
 
 
