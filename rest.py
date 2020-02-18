@@ -130,7 +130,7 @@ class TLSProfileList(Resource):
         base_query.create_item(models.TLSProfile, **request.json)
 
 
-@api.route('/tsl-profile/<string:name>')
+@api.route('/tls-profile/<string:name>')
 class TLSProfile(Resource):
     def get(self, name):
         return base_query.get_item(models.TLSProfile, name=name)
@@ -140,6 +140,27 @@ class TLSProfile(Resource):
 
     def delete(self, name):
         base_query.delete_item(models.TLSProfile, name=name)
+
+
+@api.route('/certificates')
+class CertificateList(Resource):
+    def get(self):
+        return base_query.get_all_items(models.Certificate, **request.args)
+
+    def post(self):
+        base_query.create_item(models.Certificate, **request.json)
+
+
+@api.route('/certificate/<string:name>')
+class Certificate(Resource):
+    def get(self, name):
+        return base_query.get_item(models.Certificate, name=name)
+
+    def put(self, name):
+        return base_query.update_item(models.Certificate, {'name': name}, **request.json)        
+
+    def delete(self, name):
+        base_query.delete_item(models.Certificate, name=name)
 
 
 @api.route('/addresses')
