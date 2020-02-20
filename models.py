@@ -102,10 +102,9 @@ class Certificate(BaseDocument):
     name = StringField(required=True)
     body = StringField()
     private_key = StringField()
-    subjects = ListField(StringField)
+    subjects = ListField(StringField())
     issue_date = DateTimeField()
     expiry_date = DateTimeField()
-    certificate = StringField()
     meta = {
         'indexes': [
             {

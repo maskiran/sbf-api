@@ -1,9 +1,11 @@
 import os
 import time
 
+import arrow
 from flask import Flask, abort, request
 from flask_restplus import Api, Resource
 from mongoengine import connect
+import OpenSSL.crypto
 
 import base_query
 import models
@@ -145,10 +147,32 @@ class TLSProfile(Resource):
 @api.route('/certificates')
 class CertificateList(Resource):
     def get(self):
-        return base_query.get_all_items(models.Certificate, **request.args)
+        # rearrange date
+        data = base_query.get_all_items(models.Certificate, **request.args)
+        for item in data['items']:
+            # can't send body and key
+            del item['body']
+            del item['private_key']
+            item['expiry_date'] = item['expiry_date'].get('$date', "")
+            item['issue_date'] = item['issue_date'].get('$date', "")
+        return data
 
     def post(self):
-        base_query.create_item(models.Certificate, **request.json)
+        # parse certificate for important information
+        cert = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, request.json['body'])
+        issue_date = arrow.get(cert.get_notBefore().decode(), ['YYYYMMDDHHmmSSz']).datetime
+        expiry_date = arrow.get(cert.get_notAfter().decode(), ['YYYYMMDDHHmmSSz']).datetime
+        dns = []
+        for comp in cert.get_subject().get_components():
+            key, value = comp
+            if key.decode() == "CN":
+                dns.append(value.decode())
+        for idx in range(cert.get_extension_count()):
+            ext = cert.get_extension(idx)
+            if ext.get_short_name().decode() == "subjectAltName":
+                dns.extend(ext._subjectAltNameString().split(","))
+        base_query.create_item(models.Certificate, exclude_search=["body", "private_key"],
+            issue_date=issue_date, expiry_date=expiry_date, subjects=dns, **request.json)
 
 
 @api.route('/certificate/<string:name>')

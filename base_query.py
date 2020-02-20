@@ -2,8 +2,9 @@ import datetime
 import json
 
 
-def make_search_string(dict_obj):
-    values = [str(val) for val in dict_obj.values()]
+def make_search_string(exclude_keys=None, **kwargs):
+    valid_keys = set(kwargs.keys()) - set(exclude_keys)
+    values = [str(kwargs[val]) for val in valid_keys]
     return " ".join(values)
 
 def get_all_items(model_cls_name, page_size=25, page=1, sort=None, **kwargs):
@@ -69,10 +70,10 @@ def get_item(model_cls_name, **kwargs):
         return item
 
 
-def create_item(model_cls_name, **kwargs):
+def create_item(model_cls_name, exclude_search=None, **kwargs):
     item = model_cls_name(**kwargs)
     # add all the values to search field
-    item.search = make_search_string(kwargs)
+    item.search = make_search_string(exclude_search, **kwargs)
     item.date_added = datetime.datetime.utcnow()
     item.date_modified = datetime.datetime.utcnow()
     item.save()        
@@ -94,7 +95,7 @@ def update_item(model_cls_name, src_item_query, **kwargs):
     json_item = json.loads(item.to_json())
     for key in implicit_keys:
         json_item.pop(key, None)
-    item.search = make_search_string(json_item)
+    item.search = make_search_string(**json_item)
     item.save()
 
 

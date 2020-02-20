@@ -1,4 +1,4 @@
 mongoengine
 flask
 flask-restplus
-flask-mongoengine
+pyopenssl
