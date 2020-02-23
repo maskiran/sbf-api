@@ -30,6 +30,7 @@ class Service(BaseDocument):
     proxy_waf_profile = StringField()
     proxy_policy_profile = StringField()
     refresh_time = DateTimeField()
+    proxy_ip = StringField()
     deleted = BooleanField(default=False)
     meta = {
         'indexes': [
