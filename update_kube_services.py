@@ -35,6 +35,7 @@ def create_kube_services_from_kubeconfig(kube_config_file, refresh_time):
             "cluster_ip": svc.spec.cluster_ip,
             "ports": list(map(lambda x: {'name': x.name, 'port': x.port},
                          svc.spec.ports)),
+            "deleted": False,
         }
         db_svc = models.Service.objects(uid=svc.metadata.uid)
         if db_svc.count() >=1:
