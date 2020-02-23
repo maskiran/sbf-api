@@ -1,4 +1,4 @@
-from mongoengine import Document, StringField, IntField, MapField, DateTimeField, ListField
+from mongoengine import Document, StringField, IntField, MapField, DateTimeField, ListField, DictField, BooleanField
 
 
 class BaseDocument(Document):
@@ -16,28 +16,40 @@ class BaseDocument(Document):
 
 class Service(BaseDocument):
     """
-    Service object
+    Kube and Proxy Service object
     """
-    name = StringField(required=True, unique=True)
-    description = StringField(default="")
-    listen_port = IntField(required=True)
-    target = StringField(required=True)
-    end_point = StringField()
-    tls_profile = StringField()
-    waf_profile = StringField()
+    uid = StringField()
+    name = StringField(required=True)
+    namespace = StringField()
+    cluster_ip = StringField()
+    ports = ListField()
+    labels = DictField()
+    creation_timestamp = DateTimeField()
+    proxy_port = IntField()
+    proxy_tls_profile = StringField()
+    proxy_waf_profile = StringField()
+    proxy_policy_profile = StringField()
+    refresh_time = DateTimeField()
+    deleted = BooleanField(default=False)
     meta = {
         'indexes': [
             {
-                'fields': ['name'],
+                'fields': ['uid'],
                 'unique': True
             }
         ]
     }
 
 
-class Rule(BaseDocument):
+class PolicyProfile(BaseDocument):
     name = StringField()
-    service_name = StringField()
+    services = ListField(StringField())
+    rule_count = IntField()
+
+
+class PolicyProfileRule(BaseDocument):
+    name = StringField()
+    profile_name = StringField()
     source = StringField(default="any")
     action = StringField(choices=['allow', 'drop'])
     log = StringField(choices=['log', 'nolog'])
@@ -85,7 +97,7 @@ class WafProfileRuleSet(BaseDocument):
     }
 
 
-class TLSProfile(BaseDocument):
+class TlsProfile(BaseDocument):
     name = StringField(required=True)
     certificate = StringField()
     meta = {
@@ -119,6 +131,20 @@ class Address(BaseDocument):
     name = StringField(required=True)
     value = StringField(required=True)
     description = StringField()
+    meta = {
+        'indexes': [
+            {
+                'fields': ['name'],
+                'unique': True
+            }
+        ]
+    }
+
+
+class KubeProfile(BaseDocument):
+    name = StringField(required=True)
+    kube_config = StringField()
+    cluster = StringField()
     meta = {
         'indexes': [
             {

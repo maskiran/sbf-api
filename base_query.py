@@ -81,7 +81,7 @@ def create_item(model_cls_name, exclude_search=None, **kwargs):
     item.save()        
 
 
-def update_item(model_cls_name, src_item_query, **kwargs):
+def update_item(model_cls_name, src_item_query, exclude_search=None, upsert=False, **kwargs):
     """
     src_item_query is a dict to find the source item to update
     **kwargs is key-value arguments to update. The key is the same
@@ -92,12 +92,12 @@ def update_item(model_cls_name, src_item_query, **kwargs):
     for key in implicit_keys:
         kwargs.pop(key, None)
     kwargs['date_modified'] = datetime.datetime.utcnow()
-    item = model_cls_name.objects(**src_item_query).modify(new=True, **kwargs)
+    item = model_cls_name.objects(**src_item_query).modify(new=True, upsert=upsert, **kwargs)
     # add search with the modified items
     json_item = json.loads(item.to_json())
     for key in implicit_keys:
         json_item.pop(key, None)
-    item.search = make_search_string(**json_item)
+    item.search = make_search_string(exclude_search, **json_item)
     item.save()
 
 

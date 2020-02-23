@@ -1,9 +1,11 @@
 import os
+import tempfile
 import time
 
 import arrow
 from flask import Flask, abort, request
 from flask_restplus import Api, Resource
+import kubernetes
 from mongoengine import connect
 import OpenSSL.crypto
 
@@ -33,35 +35,11 @@ class Service(Resource):
 
     def put(self, name):
         data = request.json
-        del data['name']
+        # only proxy*, tls, waf, policy are updateable
+        im_fields = ['name', 'namespace', 'cluster_ip', 'ports', 'labels', 'creation_timestamp', 'refresh_time']
+        for im_field in im_fields:
+            del data[im_field]
         return base_query.update_item(models.Service, {'name': name}, **request.json)
-
-    def delete(self, name):
-        # delete service policy
-        base_query.delete_item(models.Rule, service_name=name)
-        return base_query.delete_item(models.Service, name=name)
-
-
-@api.route('/service/<string:name>/rules')
-class RuleList(Resource):
-    def get(self, name):
-        """
-        Get rules for the given service name
-        """
-        return base_query.get_all_items(models.Rule, service_name=name, **request.args)
-
-    def post(self, name):
-        body = request.json
-        return base_query.create_item(models.Rule, service_name=name, **body)
-
-
-@api.route('/service/<string:name>/rule/<string:rule_id>')
-class Rule(Resource):
-    def put(self, name, rule_id):
-        return base_query.update_item(models.Rule, {'id': rule_id}, **request.json)        
-
-    def delete(self, name, rule_id):
-        return base_query.delete_item(models.Rule, id=rule_id)
 
 
 @api.route('/waf-rule-sets')
@@ -95,7 +73,9 @@ class WafProfile(Resource):
         return base_query.get_item(models.WafProfile, name=name)
 
     def put(self, name):
-        return base_query.update_item(models.WafProfile, {'name': name}, **request.json)        
+        data = request.json
+        del data['name']
+        return base_query.update_item(models.WafProfile, {'name': name}, **data)        
 
     def delete(self, name):
         base_query.delete_item(models.WafProfile, name=name)
@@ -124,24 +104,26 @@ class WafProfileRuleSetList(Resource):
 
 
 @api.route('/tls-profiles')
-class TLSProfileList(Resource):
+class TlsProfileList(Resource):
     def get(self):
-        return base_query.get_all_items(models.TLSProfile, **request.args)
+        return base_query.get_all_items(models.TlsProfile, **request.args)
 
     def post(self):
-        base_query.create_item(models.TLSProfile, **request.json)
+        base_query.create_item(models.TlsProfile, **request.json)
 
 
 @api.route('/tls-profile/<string:name>')
-class TLSProfile(Resource):
+class TlsProfile(Resource):
     def get(self, name):
-        return base_query.get_item(models.TLSProfile, name=name)
+        return base_query.get_item(models.TlsProfile, name=name)
 
     def put(self, name):
-        return base_query.update_item(models.TLSProfile, {'name': name}, **request.json)        
+        data = request.json
+        del data['name']
+        return base_query.update_item(models.TlsProfile, {'name': name}, **data)        
 
     def delete(self, name):
-        base_query.delete_item(models.TLSProfile, name=name)
+        base_query.delete_item(models.TlsProfile, name=name)
 
 
 @api.route('/certificates')
@@ -180,9 +162,6 @@ class Certificate(Resource):
     def get(self, name):
         return base_query.get_item(models.Certificate, name=name)
 
-    def put(self, name):
-        return base_query.update_item(models.Certificate, {'name': name}, **request.json)        
-
     def delete(self, name):
         base_query.delete_item(models.Certificate, name=name)
 
@@ -202,10 +181,111 @@ class Address(Resource):
         return base_query.get_item(models.Address, name=name)
 
     def put(self, name):
-        return base_query.update_item(models.Address, {'name': name}, **request.json)        
+        data = request.json
+        del data['name']
+        return base_query.update_item(models.Address, {'name': name}, **data)        
 
     def delete(self, name):
         base_query.delete_item(models.Address, name=name)
+
+
+@api.route('/kube-profiles')
+class KubeProfileList(Resource):
+    def get(self):
+        data = base_query.get_all_items(models.KubeProfile, **request.args)
+        # delete kube_config
+        for item in data['items']:
+            item['kube_config'] = 'CONTENTS-HIDDEN'
+        return data
+
+    def post(self):
+        # get the clusters in the kube_config
+        kube_config = request.json['kube_config']
+        tmp_fd, tmp_file_name = tempfile.mkstemp(text=True)
+        fd = os.fdopen(tmp_fd, "w")
+        fd.write(kube_config)
+        fd.close()
+        kubernetes.config.load_kube_config(tmp_file_name)
+        _, cur_context = kubernetes.config.list_kube_config_contexts()
+        base_query.create_item(models.KubeProfile,
+            cluster=cur_context['name'], exclude_search=["kube_config"],
+            **request.json)
+
+
+@api.route('/kube-profile/<string:name>')
+class KubeProfile(Resource):
+    def get(self, name):
+        item = base_query.get_item(models.KubeProfile, name=name)
+        # dont send kube config
+        item['kube_config'] = "CONTENTS-HIDDEN"
+        return item
+
+    def put(self, name):
+        data = request.json
+        if data['kube_config'] == 'CONTENTS-HIDDEN':
+            # dont update kube_config
+            del data['kube_config']
+        del data['name']
+        return base_query.update_item(models.KubeProfile, {'name': name},
+            exclude_search=["kube_config"], **data)        
+
+    def delete(self, name):
+        base_query.delete_item(models.KubeProfile, name=name)
+
+
+@api.route('/policy-profiles')
+class PolicyProfileList(Resource):
+    def get(self):
+        """
+        Get rules for the given service name
+        """
+        return base_query.get_all_items(models.PolicyProfile, **request.args)
+
+    def post(self):
+        body = request.json
+        return base_query.create_item(models.PolicyProfile, **body)
+
+
+@api.route('/policy-profile/<string:name>')
+class PolicyProfile(Resource):
+    def get(self, name):
+        return base_query.get_item(models.PolicyProfile, name=name)
+
+    def delete(self, name):
+        return base_query.delete_item(models.PolicyProfile, name=name)
+
+
+@api.route('/policy-rules/<string:policy_profile_name>')
+class PolicyProfileRuleList(Resource):
+    def get(self, policy_profile_name):
+        return base_query.get_all_items(models.PolicyProfileRule,
+            profile_name=policy_profile_name, **request.args)
+
+    def post(self, policy_profile_name):
+        body = request.json
+        body['profile_name'] = policy_profile_name
+        base_query.create_item(models.PolicyProfileRule, **body)
+        # get number of rules in the profile
+        items = base_query.get_all_items(models.PolicyProfileRule, profile_name=policy_profile_name)
+        base_query.update_item(models.PolicyProfile, {'name': policy_profile_name}, rule_count=items['count'])
+
+
+@api.route('/policy-rule/<string:policy_profile_name>/<string:rule_id>')
+class PolicyProfileRule(Resource):
+    def get(self, policy_profile_name, rule_id):
+        return base_query.get_item(models.PolicyProfileRule,
+            profile_name=policy_profile_name, id=rule_id)
+
+    def put(self, policy_profile_name, rule_id):
+        body = request.json
+        del body['id']
+        return base_query.update_item(models.PolicyProfileRule,
+            {'profile_name': policy_profile_name, 'id': rule_id},
+            body)
+
+    def delete(self, policy_profile_name, rule_id):
+        return base_query.delete_item(models.PolicyProfileRule,
+            profile_name=policy_profile_name, id=rule_id)
 
 
 if __name__ == "__main__":
