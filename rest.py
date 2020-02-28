@@ -36,7 +36,7 @@ class Service(Resource):
     def put(self, name):
         data = request.json
         # only proxy*, tls, waf, policy are updateable
-        im_fields = ['name', 'namespace', 'cluster_ip', 'ports', 'labels', 'creation_timestamp', 'refresh_time']
+        im_fields = ['name', 'namespace', 'cluster_ip', 'ports', 'labels', 'creation_timestamp']
         for im_field in im_fields:
             del data[im_field]
         return base_query.update_item(models.Service, {'name': name}, **request.json)

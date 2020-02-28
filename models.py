@@ -19,18 +19,19 @@ class Service(BaseDocument):
     Kube and Proxy Service object
     """
     uid = StringField()
+    kube_profile = StringField()
     name = StringField(required=True)
     namespace = StringField()
     cluster_ip = StringField()
     ports = ListField()
-    labels = DictField()
+    labels = ListField()
     creation_timestamp = DateTimeField()
-    proxy_port = IntField()
+    proxy_port = IntField() # in nodeport deployment this is replaced with host port
+    proxy_ip = StringField() # filled in later when the proxy svc is deployed (lbname or nodeport)
     proxy_tls_profile = StringField()
     proxy_waf_profile = StringField()
     proxy_policy_profile = StringField()
-    refresh_time = DateTimeField()
-    proxy_ip = StringField()
+    proxy_date_deployed = DateTimeField()
     deleted = BooleanField(default=False)
     meta = {
         'indexes': [
