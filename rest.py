@@ -23,10 +23,6 @@ class ServiceList(Resource):
     def get(self):
         return base_query.get_all_items(models.Service, **request.args)
 
-    def post(self):
-        body = request.json
-        return base_query.create_item(models.Service, **body)
-
 
 @api.route('/service/<string:name>')
 class Service(Resource):
@@ -36,7 +32,7 @@ class Service(Resource):
     def put(self, name):
         data = request.json
         # only proxy*, tls, waf, policy are updateable
-        im_fields = ['name', 'namespace', 'cluster_ip', 'ports', 'labels', 'creation_timestamp']
+        im_fields = ['name', 'namespace', 'cluster_ip', 'ports', 'labels', 'creation_timestamp', 'proxy_date_deployed']
         for im_field in im_fields:
             del data[im_field]
         return base_query.update_item(models.Service, {'name': name}, **request.json)

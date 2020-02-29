@@ -27,7 +27,8 @@ class Service(BaseDocument):
     labels = ListField()
     creation_timestamp = DateTimeField()
     proxy_port = IntField() # in nodeport deployment this is replaced with host port
-    proxy_ip = StringField() # filled in later when the proxy svc is deployed (lbname or nodeport)
+    proxy_ip = ListField() # filled in later when the proxy svc is deployed (lbname or nodeport)
+    proxy_svc_name = StringField()
     proxy_tls_profile = StringField()
     proxy_waf_profile = StringField()
     proxy_policy_profile = StringField()
