@@ -46,10 +46,15 @@ spec:
         - name: nginx-conf
           mountPath: /etc/modsecurity.d/crs/crs-setup.conf
           subPath: crs-setup.conf
+        - name: crs-rules
+          mountPath: /etc/modsecurity.d/crs/rules
       volumes:
       - name: nginx-conf
         configMap:
           name: {{proxy_name}}
+      - name: crs-rules
+        hostPath:
+          path: /home/docker/rules
 """
 
 proxy_service_template = """
