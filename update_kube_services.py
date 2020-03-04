@@ -10,6 +10,7 @@ import tempfile
 from mongoengine import connect, errors, disconnect
 from kubernetes import config, client, watch
 
+import create_proxy_svc
 import models
 
 
@@ -19,11 +20,11 @@ MONGODB = "mongodb://localhost/sbf"
 def upsert_service(kube_profile_name, svc, modified=False):
     # svc is the data obtained from the list_service or watch event
     # that has metadata and spec dicts
-    if svc.metadata.namespace == "kube-system" or svc.metadata.name == "kubernetes":
-        return
-
     labels = []
-    for (key, value) in svc.metadata.labels.items():
+    svc_labels = svc.metadata.labels
+    if svc_labels is None:
+        svc_labels = {}
+    for (key, value) in svc_labels.items():
         labels.append({
             'name': key,
             'value': value
@@ -47,17 +48,30 @@ def upsert_service(kube_profile_name, svc, modified=False):
     if modified:
         data['date_modified'] = datetime.datetime.now()
 
-    models.Service.objects(uid=svc.metadata.uid).update(
-        upsert=True, **data)
+    rsp = models.Service.objects(uid=svc.metadata.uid).modify(
+        upsert=True, new=True, **data)
+    create_proxy_svc.protect_service(rsp)
+
+
+def delete_service(event_object):
+    app_svc = models.Service.objects(uid=event_object.metadata.uid).get()
+    create_proxy_svc.delete_protection(app_svc)
+    models.Service.objects(uid=event_object.metadata.uid).delete()
 
 
 def process_event(event_type, event_object, kube_profile_name):
+    if event_object.metadata.namespace == "kube-system" or event_object.metadata.name == "kubernetes":
+        return
+    # if event has labels "type=sbf-proxy"
+    ltype = event_object.metadata.labels.get('type', "")
+    if ltype == "sbf-proxy":
+        return
     if event_type == "ADDED":
         upsert_service(kube_profile_name, event_object)
     elif event_type == "MODIFIED":
         upsert_service(kube_profile_name, event_object, modified=True)
     elif event_type == "DELETED":
-        models.Service.objects(uid=event_object.metadata.uid).delete()
+        delete_service(event_object)
 
 
 def monitor_kube(kube_profile):
@@ -73,7 +87,7 @@ def monitor_kube(kube_profile):
     rsp = v1.list_service_for_all_namespaces()
     resource_version = rsp.metadata.resource_version
     for svc in rsp.items:
-        upsert_service(kube_profile.name, svc)
+        process_event('ADDED', svc, kube_profile.name)
     watcher = watch.Watch()
     for event in watcher.stream(v1.list_service_for_all_namespaces, resource_version=resource_version):
         process_event(event['type'], event['object'], kube_profile.name)
