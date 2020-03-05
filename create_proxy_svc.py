@@ -1,17 +1,16 @@
 """
 Create proxy service for a given kube service's cluster ip and port
 """
+import base64
 import datetime
 import os
+import shutil
+import tarfile
 import tempfile
 from jinja2 import Template
 from kubernetes import config, client
-from mongoengine import connect
 import yaml
 import models
-
-MONGODB = "mongodb://localhost/sbf"
-connect(host=MONGODB)
 
 proxy_deployment_template = """
 apiVersion: apps/v1
@@ -27,7 +26,17 @@ spec:
     metadata:
       labels:
         run: {{proxy_name}}
+        updated: {{date_time}}
     spec:
+      initContainers:
+      - name: setup-rules
+        image: alpine
+        volumeMounts:
+        - name: rules-tgz
+          mountPath: /rules
+        - name: crs-rules
+          mountPath: /crs-rules
+        command: ['tar', '-zxf', '/rules/rules.tgz', '-C', '/crs-rules']
       containers:
       - name: {{proxy_name}}
         image: owasp/modsecurity:3.0-nginx
@@ -52,9 +61,11 @@ spec:
       - name: nginx-conf
         configMap:
           name: {{proxy_name}}
+      - name: rules-tgz
+        secret:
+          secretName: {{proxy_name}}
       - name: crs-rules
-        hostPath:
-          path: /home/docker/rules
+        emptyDir: {}
 """
 
 proxy_service_template = """
@@ -81,27 +92,72 @@ metadata:
   name: {{proxy_name}}
 data:
   nginx.conf: |
-    {{proxy_nginx_data | indent(4)}}
+    {{nginx_conf | indent(4)}}
   include.conf: |
     {{modsec_include | indent(4)}}
   modsecurity.conf: |
     {{modsec_conf | indent(4)}}
   crs-setup.conf: |
-    {{crs_setup | indent(4)}}
+    {{crs_setup_conf | indent(4)}}
 """
 
+proxy_secrets_template = """
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{proxy_name}}
+data:
+  rules.tgz: |
+    {{rules_b64 | indent(4)}}
+"""
 
-def create_proxy_config(app_svc):
+def prepare_waf_rulesets(waf_profile_name):
+    # include *.data, REQUEST-90*, RESPONSE-980-CORRELATION
+    _, tmp_file_name = tempfile.mkstemp()
+    tmp_file_name = tmp_file_name + '.tgz'
+    dst_rulesdir = tempfile.mkdtemp()
+    src_rulesdir = os.path.join('modsec', 'rules')
+    for fname in os.listdir(src_rulesdir):
+        if fname.endswith('.data') or fname.startswith('REQUEST-90') or fname.startswith('RESPONSE-980') or fname.startswith('REQUEST-949') or fname.startswith('REQUEST-959'):
+            shutil.copy2(os.path.join(src_rulesdir, fname), dst_rulesdir)
+    # find the rule file names defined in waf_profile_name
+    for rule in models.WafProfileRuleSet.objects(profile_name=waf_profile_name):
+        fname = rule.rule_set_name + '.conf'
+        shutil.copy2(os.path.join(src_rulesdir, fname), dst_rulesdir)
+    with tarfile.open(tmp_file_name, "w:gz") as tar:
+        tar.add(dst_rulesdir, arcname="")
+    shutil.rmtree(dst_rulesdir)
+    return tmp_file_name
+
+
+def prepare_config_map(app_svc):
     upstream = app_svc.cluster_ip + ":" + str(app_svc.ports[0]['port'])
-    nginx_data = Template(open('modsec/nginx.conf').read()).render(cluster_ip_port=upstream, upstream_name=app_svc.name)
+    nginx_conf = Template(open('modsec/nginx.conf').read()).render(
+        cluster_ip_port=upstream, upstream_name=app_svc.name)
     modsec_include = open('modsec/include.conf').read()
     modsec_conf = open('modsec/modsecurity.conf').read()
-    crs_setup = open('modsec/crs-setup.conf').read()
+    crs_setup_conf = open('modsec/crs-setup.conf').read()
     t = Template(proxy_config_template)
     config_name = "proxy-" + app_svc.name
     body = t.render(proxy_name=config_name,
-        proxy_nginx_data=nginx_data, modsec_include=modsec_include,
-        modsec_conf=modsec_conf, crs_setup=crs_setup)
+        nginx_conf=nginx_conf, modsec_include=modsec_include,
+        modsec_conf=modsec_conf, crs_setup_conf=crs_setup_conf)
+    return body
+
+
+def prepare_secrets(app_svc):
+    # prepare waf rule sets
+    rules_tar_file = prepare_waf_rulesets(app_svc.proxy_waf_profile)
+    rules_b64 = base64.b64encode(open(rules_tar_file, "rb").read()).decode()
+    config_name = "proxy-" + app_svc.name
+    t = Template(proxy_secrets_template)
+    body = t.render(proxy_name=config_name, rules_b64=rules_b64)
+    return body
+
+
+def create_proxy_config(app_svc):
+    config_name = "proxy-" + app_svc.name
+    body = prepare_config_map(app_svc)
     body = yaml.safe_load(body)
     v1 = client.CoreV1Api()
     try:
@@ -114,11 +170,27 @@ def create_proxy_config(app_svc):
             raise(e)
 
 
+def create_proxy_secrets(app_svc):
+    config_name = "proxy-" + app_svc.name
+    body = prepare_secrets(app_svc)
+    body = yaml.safe_load(body)
+    v1 = client.CoreV1Api()
+    try:
+        v1.create_namespaced_secret(body=body, namespace=app_svc.namespace)
+    except client.rest.ApiException as e:
+        if e.reason == "Conflict":
+            v1.patch_namespaced_secret(
+                name=config_name, body=body, namespace=app_svc.namespace)
+        else:
+            raise(e)
+
+
 def create_proxy_deployment(app_svc):
     # create a pod that reverse proxies to the app_svc
     t = Template(proxy_deployment_template)
     deployment_name = "proxy-" + app_svc.name
-    body = t.render(proxy_name=deployment_name)
+    cur_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    body = t.render(proxy_name=deployment_name, date_time="t"+cur_time)
     body = yaml.safe_load(body)
     v1 = client.AppsV1Api()
     try:
@@ -190,6 +262,7 @@ def load_kube_config(app_svc):
 def protect_service(app_svc):
     load_kube_config(app_svc)
     create_proxy_config(app_svc)
+    create_proxy_secrets(app_svc)
     create_proxy_deployment(app_svc)
     rsp = create_proxy_svc(app_svc)
     update_svc(app_svc, rsp)

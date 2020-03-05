@@ -10,6 +10,7 @@ from mongoengine import connect
 import OpenSSL.crypto
 
 import base_query
+import create_proxy_svc
 import models
 
 DB_HOST = os.getenv('MONGODB_HOST', 'mongodb://localhost/sbf')
@@ -32,10 +33,12 @@ class Service(Resource):
     def put(self, name):
         data = request.json
         # only proxy*, tls, waf, policy are updateable
-        im_fields = ['name', 'namespace', 'cluster_ip', 'ports', 'labels', 'creation_timestamp', 'proxy_date_deployed']
+        im_fields = ['name', 'namespace', 'cluster_ip', 'ports', 'labels', 'creation_timestamp']
         for im_field in im_fields:
             del data[im_field]
-        return base_query.update_item(models.Service, {'name': name}, **request.json)
+        rsp = base_query.update_item(models.Service, {'name': name}, **request.json)
+        create_proxy_svc.protect_service(rsp)
+        return rsp.to_json()
 
 
 @api.route('/waf-rule-sets')

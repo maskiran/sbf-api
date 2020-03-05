@@ -99,6 +99,7 @@ def update_item(model_cls_name, src_item_query, exclude_search=None, upsert=Fals
         json_item.pop(key, None)
     item.search = make_search_string(exclude_search, **json_item)
     item.save()
+    return item
 
 
 def delete_item(model_cls_name, **kwargs):

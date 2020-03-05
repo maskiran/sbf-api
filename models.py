@@ -32,7 +32,6 @@ class Service(BaseDocument):
     proxy_tls_profile = StringField()
     proxy_waf_profile = StringField()
     proxy_policy_profile = StringField()
-    proxy_date_deployed = DateTimeField()
     deleted = BooleanField(default=False)
     meta = {
         'indexes': [
