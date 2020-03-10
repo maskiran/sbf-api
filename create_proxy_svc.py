@@ -14,7 +14,7 @@ import models
 
 proxy_deployment_template = """
 apiVersion: apps/v1
-kind: DaemonSet
+kind: Deployment
 metadata:
   name: {{proxy_name}}
 spec:
@@ -194,10 +194,10 @@ def create_proxy_deployment(app_svc):
     body = yaml.safe_load(body)
     v1 = client.AppsV1Api()
     try:
-        v1.create_namespaced_daemon_set(body=body, namespace=app_svc.namespace)
+        v1.create_namespaced_deployment(body=body, namespace=app_svc.namespace)
     except client.rest.ApiException as e:
         if e.reason == "Conflict":
-            v1.patch_namespaced_daemon_set(
+            v1.patch_namespaced_deployment(
                 name=deployment_name, body=body, namespace=app_svc.namespace)
         else:
             raise(e)
