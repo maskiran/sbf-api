@@ -275,7 +275,7 @@ def delete_protection(app_svc):
     v1 = client.CoreV1Api()
     v1.delete_namespaced_service(name=name, namespace=namespace)
     v1 = client.AppsV1Api()
-    v1.delete_namespaced_daemon_set(name=name, namespace=namespace)
+    v1.delete_namespaced_deployment(name=name, namespace=namespace)
     update_svc(app_svc, None)
 
 
